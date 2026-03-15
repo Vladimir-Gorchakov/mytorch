@@ -39,6 +39,7 @@ namespace torch {
 
         size_t storage_offset_;
     public:
+        Tensor() : storage_(nullptr), shape_({}), strides_({}), storage_offset_(0) {}
         Tensor(const shape_t& shape);
         Tensor(std::shared_ptr<Storage<T>> storage, const shape_t& shape, shape_t strides, size_t storage_offset);
 
@@ -49,16 +50,18 @@ namespace torch {
         Tensor<T> operator*(const Tensor<T>& other) const;
         Tensor<T> operator*(const T& other) const;
 
-
+        bool empty() const {return storage_!=nullptr;}
 
         size_t numel() const;
-        size_t dim() const;
-        size_t size(size_t axis) const;
+        size_t ndim() const;
+        size_t size(size_t axis) const {return shape_[axis];}
+        size_t storage_offset() const {return storage_offset_;}
 
-        const shape_t& shape() const;
-        const shape_t& strides() const;
-        const size_t& storage_offset() const;
-        T* data_ptr() const; // do i need to return const T*?
+        const shape_t& shape() const {return shape_;}
+        const shape_t& strides() const {return strides_;}
+        
+        T* data_ptr() {return storage_->data_ + storage_offset_;}
+        const T* data_ptr() const { return storage_->data_ + storage_offset_; }
 
         shape_t compute_strides(const shape_t& shape) const;
         size_t compute_index(const shape_t& index) const;
@@ -104,36 +107,6 @@ namespace torch {
         }
             
         return n;
-    }
-
-    template<typename T>
-    size_t Tensor<T>::dim() const {
-        return shape_.size();
-    }
-
-    template<typename T>
-    size_t Tensor<T>::size(size_t axis) const {
-        return shape_[axis];
-    }
-
-    template<typename T>
-    const shape_t& Tensor<T>::shape() const {
-        return shape_;
-    }
-
-    template<typename T>
-    const shape_t& Tensor<T>::strides() const {
-        return strides_;
-    }
-
-    template<typename T>
-    const size_t& Tensor<T>::storage_offset() const {
-        return storage_offset_;
-    }
-
-    template<typename T>
-    T* Tensor<T>::data_ptr() const {
-        return storage_->data_ + storage_offset_;
     }
 
     template<typename T>
