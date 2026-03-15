@@ -8,7 +8,7 @@
 
 
 namespace torch::iterator {
-    template<typename T> class TensorIterator;
+    template<typename T> class TensorIteratorConfig;
 }
 
 namespace torch {
@@ -170,6 +170,35 @@ namespace torch {
         }
 
         return storage_->data_[compute_index(index)];
+    }
+
+
+    template<typename T>
+    Tensor<T> Tensor<T>::operator*(const Tensor<T>& other) const {
+        Tensor<T> output{};
+
+        iterator::TensorIteratorConfig<T>()
+            .add_input(this)
+            .add_input(&other)
+            .add_output(output)
+            .build()
+            .run([] (std::span<T*> ptrs) { return (*ptrs[2]) = (*ptrs[1]) * (*ptrs[0]);});
+
+        return output;
+    }
+
+    template<typename T>
+    Tensor<T> Tensor<T>::operator*(const T& other) const {
+        Tensor<T> output{};
+
+        iterator::TensorIteratorConfig<T>()
+            .add_input(this)
+            .add_output(output)
+            .build()
+            .run([&other] (std::span<T*> ptrs) { return (*ptrs[1]) = (*ptrs[0]) * other;});
+
+        return output;
+
     }
 
 
