@@ -37,10 +37,14 @@ class Tensor {
     size_t storage_offset_;
 
   public:
-    Tensor() : storage_(nullptr), shape_({}), strides_({}), storage_offset_(0) {}
+    Tensor()
+        : storage_(nullptr),
+          shape_({}),
+          strides_({}),
+          storage_offset_(0) {}
     Tensor(const shape_t& shape);
-    Tensor(std::shared_ptr<Storage<T>> storage, const shape_t& shape, shape_t strides,
-           size_t storage_offset);
+    Tensor(std::shared_ptr<Storage<T>> storage, const shape_t& shape,
+           shape_t strides, size_t storage_offset);
 
     T& operator[](const shape_t& index);
     const T& operator[](const shape_t& index) const;
@@ -131,14 +135,16 @@ bool Tensor<T>::is_contiguous() const {
 template <typename T>
 T& Tensor<T>::operator[](const shape_t& index) {
     if (index.size() != shape_.size()) [[unlikely]] {
-        throw std::out_of_range(std::format("Rank mismatch: tensor is {}-D but got {}-D index",
-                                            shape_.size(), index.size()));
+        throw std::out_of_range(
+            std::format("Rank mismatch: tensor is {}-D but got {}-D index",
+                        shape_.size(), index.size()));
     }
 
     for (size_t i = 0; i < index.size(); ++i) {
         if (index[i] >= shape_[i]) [[unlikely]] {
-            throw std::out_of_range(std::format("Index {} out of range for axis {} with size {}",
-                                                index[i], i, shape_[i]));
+            throw std::out_of_range(
+                std::format("Index {} out of range for axis {} with size {}",
+                            index[i], i, shape_[i]));
         }
     }
 
@@ -148,14 +154,16 @@ T& Tensor<T>::operator[](const shape_t& index) {
 template <typename T>
 const T& Tensor<T>::operator[](const shape_t& index) const {
     if (index.size() != shape_.size()) [[unlikely]] {
-        throw std::out_of_range(std::format("Rank mismatch: tensor is {}-D but got {}-D index",
-                                            shape_.size(), index.size()));
+        throw std::out_of_range(
+            std::format("Rank mismatch: tensor is {}-D but got {}-D index",
+                        shape_.size(), index.size()));
     }
 
     for (size_t i = 0; i < index.size(); ++i) {
         if (index[i] >= shape_[i]) [[unlikely]] {
-            throw std::out_of_range(std::format("Index {} out of range for axis {} with size {}",
-                                                index[i], i, shape_[i]));
+            throw std::out_of_range(
+                std::format("Index {} out of range for axis {} with size {}",
+                            index[i], i, shape_[i]));
         }
     }
 
@@ -171,7 +179,9 @@ Tensor<T> Tensor<T>::operator*(const Tensor<T>& other) const {
         .add_input(&other)
         .add_output(&output)
         .build()
-        .run([](std::span<T*> ptrs) { return (*ptrs[2]) = (*ptrs[1]) * (*ptrs[0]); });
+        .run([](std::span<T*> ptrs) {
+            return (*ptrs[2]) = (*ptrs[1]) * (*ptrs[0]);
+        });
 
     return output;
 }
@@ -180,8 +190,13 @@ template <typename T>
 Tensor<T> Tensor<T>::operator*(const T& other) const {
     Tensor<T> output{};
 
-    iterator::TensorIteratorConfig<T>().add_input(this).add_output(&output).build().run(
-        [&other](std::span<T*> ptrs) { return (*ptrs[1]) = (*ptrs[0]) * other; });
+    iterator::TensorIteratorConfig<T>()
+        .add_input(this)
+        .add_output(&output)
+        .build()
+        .run([&other](std::span<T*> ptrs) {
+            return (*ptrs[1]) = (*ptrs[0]) * other;
+        });
 
     return output;
 }
