@@ -59,6 +59,12 @@ class Tensor {
     Tensor<T> operator*(const Tensor<T>& other) const;
     Tensor<T> operator*(const T& other) const;
 
+    Tensor<T> operator+(const Tensor<T>& other) const;
+    Tensor<T> operator+(const T& other) const;
+
+    Tensor<T> operator/(const Tensor<T>& other) const;
+    Tensor<T> operator/(const T& other) const;
+
     bool empty() const { return storage_ == nullptr; }
 
     size_t numel() const;
@@ -203,6 +209,68 @@ Tensor<T> Tensor<T>::operator*(const T& other) const {
         .build()
         .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
             return (*ptrs_out[0]) = (*ptrs_in[0]) * other;
+        });
+
+    return output;
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::operator+(const Tensor<T>& other) const {
+    Tensor<T> output{};
+
+    iterator::TensorIteratorConfig<T>()
+        .add_input(*this)
+        .add_input(other)
+        .add_output(output)
+        .build()
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[1]) + (*ptrs_in[0]);
+        });
+
+    return output;
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::operator+(const T& other) const {
+    Tensor<T> output{};
+
+    iterator::TensorIteratorConfig<T>()
+        .add_input(*this)
+        .add_output(output)
+        .build()
+        .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[0]) + other;
+        });
+
+    return output;
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::operator/(const Tensor<T>& other) const {
+    Tensor<T> output{};
+
+    iterator::TensorIteratorConfig<T>()
+        .add_input(*this)
+        .add_input(other)
+        .add_output(output)
+        .build()
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[0]) / (*ptrs_in[1]);
+        });
+
+    return output;
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::operator/(const T& other) const {
+    Tensor<T> output{};
+
+    iterator::TensorIteratorConfig<T>()
+        .add_input(*this)
+        .add_output(output)
+        .build()
+        .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[0]) / other;
         });
 
     return output;
