@@ -12,8 +12,8 @@ class TensorIteratorConfig;
 }
 
 namespace torch {
-using shape_t = std::vector<size_t>;
 using size_t = std::size_t;
+using shape_t = std::vector<size_t>;
 
 template <typename T>
 class Storage {
@@ -46,16 +46,23 @@ class Tensor {
     Tensor(std::shared_ptr<Storage<T>> storage, const shape_t& shape,
            shape_t strides, size_t storage_offset);
 
-    T& operator[](const shape_t& index);
-    const T& operator[](const shape_t& index) const;
+    T& operator()(const shape_t& index);
+    const T& operator()(const shape_t& index) const;
+
+    T& operator[](const size_t index) {
+        return storage_->data_[index + storage_offset_];
+    }
+    const T& operator[](const size_t index) const {
+        return storage_->data_[index + storage_offset_];
+    }
 
     Tensor<T> operator*(const Tensor<T>& other) const;
     Tensor<T> operator*(const T& other) const;
 
-    bool empty() const { return storage_ != nullptr; }
+    bool empty() const { return storage_ == nullptr; }
 
     size_t numel() const;
-    size_t ndim() const;
+    size_t ndim() const { return shape_.size(); }
     size_t size(size_t axis) const { return shape_[axis]; }
     size_t storage_offset() const { return storage_offset_; }
 
@@ -133,7 +140,7 @@ bool Tensor<T>::is_contiguous() const {
 }
 
 template <typename T>
-T& Tensor<T>::operator[](const shape_t& index) {
+T& Tensor<T>::operator()(const shape_t& index) {
     if (index.size() != shape_.size()) [[unlikely]] {
         throw std::out_of_range(
             std::format("Rank mismatch: tensor is {}-D but got {}-D index",
@@ -152,7 +159,7 @@ T& Tensor<T>::operator[](const shape_t& index) {
 }
 
 template <typename T>
-const T& Tensor<T>::operator[](const shape_t& index) const {
+const T& Tensor<T>::operator()(const shape_t& index) const {
     if (index.size() != shape_.size()) [[unlikely]] {
         throw std::out_of_range(
             std::format("Rank mismatch: tensor is {}-D but got {}-D index",
@@ -175,12 +182,12 @@ Tensor<T> Tensor<T>::operator*(const Tensor<T>& other) const {
     Tensor<T> output{};
 
     iterator::TensorIteratorConfig<T>()
-        .add_input(this)
-        .add_input(&other)
-        .add_output(&output)
+        .add_input(*this)
+        .add_input(other)
+        .add_output(output)
         .build()
-        .run([](std::span<T*> ptrs) {
-            return (*ptrs[2]) = (*ptrs[1]) * (*ptrs[0]);
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[1]) * (*ptrs_in[0]);
         });
 
     return output;
@@ -191,11 +198,11 @@ Tensor<T> Tensor<T>::operator*(const T& other) const {
     Tensor<T> output{};
 
     iterator::TensorIteratorConfig<T>()
-        .add_input(this)
-        .add_output(&output)
+        .add_input(*this)
+        .add_output(output)
         .build()
-        .run([&other](std::span<T*> ptrs) {
-            return (*ptrs[1]) = (*ptrs[0]) * other;
+        .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[0]) * other;
         });
 
     return output;
