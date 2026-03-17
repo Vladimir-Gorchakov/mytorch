@@ -82,6 +82,7 @@ class Tensor {
     size_t compute_index(const shape_t& index) const;
 
     bool is_contiguous() const;
+    Tensor<T> contiguous();
 };
 
 template <typename T>
@@ -143,6 +144,23 @@ bool Tensor<T>::is_contiguous() const {
     }
 
     return true;
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::contiguous() {
+    if (is_contiguous()) {
+        return *this;
+    }
+
+    Tensor<T> new_contiguous_tensor{};
+
+    iterator::TensorIteratorConfig<T>()
+        .add_input(*this)
+        .add_output(new_contiguous_tensor)
+        .build()
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) = (*ptrs_in[0]);
+        });
 }
 
 template <typename T>
