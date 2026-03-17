@@ -62,13 +62,13 @@ TensorIterator<T>::TensorIterator(const std::vector<const Tensor<T>*>& inputs,
                                   const std::vector<Tensor<T>*>& outputs) {
     shape_ = broadcast_shape(inputs);
 
-    for (auto tensor : inputs) {
-        inputs_.push_back(
-            Operand(tensor->data_ptr(),
-                    compute_strides(tensor->strides(), tensor->shape())));
+    for (auto& tensor : inputs) {
+        inputs_.emplace_back(tensor->data_ptr(),
+                             compute_strides(tensor->strides(),
+                                             tensor->shape()));
     }
 
-    for (auto tensor : outputs) {
+    for (auto& tensor : outputs) {
         if (!(shape_ == tensor->shape())) {
             throw exception::shape_exception{
                 std::format("Shape exception: output tensor shape must be {} "
@@ -77,7 +77,7 @@ TensorIterator<T>::TensorIterator(const std::vector<const Tensor<T>*>& inputs,
                             utils::vec_to_string(tensor->shape()))};
         }
 
-        outputs_.push_back(Operand(tensor->data_ptr(), tensor->strides()));
+        outputs_.emplace_back(tensor->data_ptr(), tensor->strides());
     }
 }
 
