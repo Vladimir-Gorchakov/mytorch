@@ -2,14 +2,29 @@
 #include <algorithm>
 #include <format>
 #include <memory>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "utils.hpp"
 
 namespace torch::iterator {
 template <typename T>
 class TensorIteratorConfig;
 }
+
+namespace torch::exception {
+class shape_exception {
+  public:
+    shape_exception(std::string message) : message{message} {}
+    std::string getMessage() const { return message; }
+
+  private:
+    std::string message;
+};
+
+} // namespace torch::exception
 
 namespace torch {
 using size_t = std::size_t;
@@ -44,7 +59,11 @@ class Tensor {
           storage_offset_(0) {}
     Tensor(const shape_t& shape);
     Tensor(std::shared_ptr<Storage<T>> storage, const shape_t& shape,
-           shape_t strides, size_t storage_offset);
+           shape_t strides, size_t storage_offset)
+        : storage_(storage),
+          shape_(shape),
+          strides_(strides),
+          storage_offset_(storage_offset){};
 
     T& operator()(const shape_t& index);
     const T& operator()(const shape_t& index) const;
@@ -82,7 +101,10 @@ class Tensor {
     size_t compute_index(const shape_t& index) const;
 
     bool is_contiguous() const;
-    Tensor<T> contiguous();
+    Tensor<T> contiguous() const;
+
+    Tensor<T> transpose(size_t dim_i, size_t dim_j) const;
+    Tensor<T> reshape(const shape_t& shape) const;
 };
 
 template <typename T>
@@ -116,12 +138,8 @@ shape_t Tensor<T>::compute_strides(const shape_t& shape) const {
 
 template <typename T>
 size_t Tensor<T>::numel() const {
-    size_t n = 1;
-    for (size_t s : shape_) {
-        n *= s;
-    }
-
-    return n;
+    return std::accumulate(shape_.begin(), shape_.end(), 1u,
+                           std::multiplies<size_t>());
 }
 
 template <typename T>
@@ -147,7 +165,7 @@ bool Tensor<T>::is_contiguous() const {
 }
 
 template <typename T>
-Tensor<T> Tensor<T>::contiguous() {
+Tensor<T> Tensor<T>::contiguous() const {
     if (is_contiguous()) {
         return *this;
     }
@@ -161,6 +179,48 @@ Tensor<T> Tensor<T>::contiguous() {
         .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
             return (*ptrs_out[0]) = (*ptrs_in[0]);
         });
+
+    return new_contiguous_tensor;
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::transpose(size_t dim_i, size_t dim_j) const {
+    if (dim_i >= ndim() || dim_j >= ndim()) {
+        throw std::out_of_range(
+            std::format("transpose: dim {} is out of range for tensor with {} "
+                        "dimensions",
+                        dim_i >= ndim() ? dim_i : dim_j, ndim())
+
+        );
+    }
+
+    shape_t new_shape = shape_;
+    shape_t new_strides = strides_;
+
+    std::swap(new_shape[dim_i], new_shape[dim_j]);
+    std::swap(new_strides[dim_i], new_strides[dim_j]);
+
+    return Tensor<T>{storage_, new_shape, new_strides, storage_offset_};
+}
+
+template <typename T>
+Tensor<T> Tensor<T>::reshape(const shape_t& shape) const {
+    size_t input_numel = std::accumulate(shape.begin(), shape.end(), 1u,
+                                         std::multiplies<size_t>());
+
+    if (input_numel != numel()) {
+        throw exception::shape_exception{
+            std::format("reshape: cannot reshape tensor of shape {} ({} "
+                        "elements) "
+                        "into shape {} ({} elements)",
+                        utils::vec_to_string(shape_), numel(),
+                        utils::vec_to_string(shape), input_numel)};
+    }
+
+    Tensor<T> contiguous_tensor = contiguous();
+
+    return Tensor<T>{contiguous_tensor.storage_, shape, compute_strides(shape),
+                     storage_offset_};
 }
 
 template <typename T>
@@ -295,15 +355,3 @@ Tensor<T> Tensor<T>::operator/(const T& other) const {
 }
 
 } // namespace torch
-
-namespace torch::exception {
-class shape_exception {
-  public:
-    shape_exception(std::string message) : message{message} {}
-    std::string getMessage() const { return message; }
-
-  private:
-    std::string message;
-};
-
-} // namespace torch::exception
