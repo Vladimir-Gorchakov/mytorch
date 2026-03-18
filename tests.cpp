@@ -167,3 +167,106 @@ TEST_CASE("TensorIterator incompatible shapes throw") {
 
     REQUIRE_THROWS(a + b);
 }
+
+// ── transpose ────────────────────────────────────────────────────────────────
+
+TEST_CASE("Transpose swaps shape and strides") {
+    torch::Tensor<int> t{{3, 4}};
+    auto t_T = t.transpose(0, 1);
+
+    REQUIRE(t_T.shape()   == torch::shape_t{4, 3});
+    REQUIRE(t_T.strides() == torch::shape_t{1, 4});
+}
+
+TEST_CASE("Transpose 3D swaps correct dims") {
+    torch::Tensor<int> t{{2, 3, 4}};
+    // original strides: {12, 4, 1}
+    auto t_T = t.transpose(0, 2);
+
+    REQUIRE(t_T.shape()   == torch::shape_t{4, 3, 2});
+    REQUIRE(t_T.strides() == torch::shape_t{1, 4, 12});
+}
+
+TEST_CASE("Transpose makes tensor non-contiguous") {
+    torch::Tensor<int> t{{3, 4}};
+    REQUIRE(t.is_contiguous());
+
+    auto t_T = t.transpose(0, 1);
+    REQUIRE_FALSE(t_T.is_contiguous());
+}
+
+TEST_CASE("Transpose shares storage — write visible through both views") {
+    torch::Tensor<int> t{{3, 4}};
+    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+
+    auto t_T = t.transpose(0, 1);
+
+    // t(1,2) == 6;  after transpose that element is at t_T(2,1)
+    REQUIRE(t({1, 2}) == t_T({2, 1}));
+}
+
+TEST_CASE("Transpose out of range throws") {
+    torch::Tensor<int> t{{3, 4}};
+    REQUIRE_THROWS_AS(t.transpose(0, 2), std::out_of_range);
+    REQUIRE_THROWS_AS(t.transpose(5, 0), std::out_of_range);
+}
+
+// ── contiguous ───────────────────────────────────────────────────────────────
+
+TEST_CASE("contiguous on already-contiguous tensor returns same-storage view") {
+    torch::Tensor<int> t{{3, 4}};
+    auto c = t.contiguous();
+
+    REQUIRE(c.is_contiguous());
+    REQUIRE(c.data_ptr() == t.data_ptr());
+}
+
+TEST_CASE("contiguous on transposed tensor returns contiguous copy") {
+    torch::Tensor<int> t{{3, 4}};
+    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+
+    auto t_T = t.transpose(0, 1);
+    auto c   = t_T.contiguous();
+
+    REQUIRE(c.is_contiguous());
+    REQUIRE(c.shape() == torch::shape_t{4, 3});
+
+    // Every element must match the transposed logical view
+    for (size_t i = 0; i < 4; i++)
+        for (size_t j = 0; j < 3; j++)
+            REQUIRE(c({i, j}) == t_T({i, j}));
+}
+
+// ── reshape ──────────────────────────────────────────────────────────────────
+
+TEST_CASE("Reshape preserves numel and values") {
+    torch::Tensor<int> t{{2, 6}};
+    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+
+    torch::shape_t new_shape{3, 4};
+    auto r = t.reshape(new_shape);
+
+    REQUIRE(r.shape() == torch::shape_t{3, 4});
+    REQUIRE(r.numel() == 12u);
+
+    for (size_t i = 0; i < r.numel(); i++)
+        REQUIRE(r[i] == (int)i);
+}
+
+TEST_CASE("Reshape to 1D") {
+    torch::Tensor<int> t{{3, 4}};
+    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+
+    torch::shape_t flat{12};
+    auto r = t.reshape(flat);
+
+    REQUIRE(r.shape() == torch::shape_t{12});
+    REQUIRE(r.ndim() == 1u);
+    REQUIRE(r[11] == 11);
+}
+
+TEST_CASE("Reshape incompatible numel throws") {
+    torch::Tensor<int> t{{2, 6}};
+    torch::shape_t bad{3, 5};  // 15 != 12
+    REQUIRE_THROWS(t.reshape(bad));
+}
