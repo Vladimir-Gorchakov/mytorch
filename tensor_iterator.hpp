@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <functional>
 #include <numeric>
@@ -60,7 +61,12 @@ class TensorIterator {
 template <typename T>
 TensorIterator<T>::TensorIterator(const std::vector<const Tensor<T>*>& inputs,
                                   const std::vector<Tensor<T>*>& outputs) {
-    shape_ = broadcast_shape(inputs);
+    if (inputs.empty()) {
+        assert((!outputs.empty()));
+        shape_ = outputs[0]->shape();
+    } else {
+        shape_ = broadcast_shape(inputs);
+    }
 
     for (auto& tensor : inputs) {
         inputs_.emplace_back(tensor->data_ptr(),
@@ -233,6 +239,7 @@ class TensorIteratorConfig {
                                 // общего случая должны выглядить шейпы
 
         if (outputs_[0]->empty()) {
+            assert((!inputs_.empty()));
             shape_t shape = TensorIterator<T>::broadcast_shape(inputs_);
             *outputs_[0] = Tensor<T>{shape};
         }
