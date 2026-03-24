@@ -105,6 +105,9 @@ class Tensor {
 
     Tensor<T> transpose(size_t dim_i, size_t dim_j) const;
     Tensor<T> reshape(const shape_t& shape) const;
+
+    // _ - на конце обозначает inplace операцию
+    Tensor<T>& fill_(const T& other);
 };
 
 template <typename T>
@@ -221,6 +224,17 @@ Tensor<T> Tensor<T>::reshape(const shape_t& shape) const {
 
     return Tensor<T>{contiguous_tensor.storage_, shape, compute_strides(shape),
                      storage_offset_};
+}
+
+template <typename T>
+Tensor<T>& Tensor<T>::fill_(const T& other) {
+    iterator::TensorIteratorConfig<T>().add_output(*this).build().run(
+        [other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            ptrs_in; // чисто чтобы не ругался статический анализатор
+            return (*ptrs_out[0]) = other;
+        });
+
+    return *this;
 }
 
 template <typename T>
