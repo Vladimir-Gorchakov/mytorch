@@ -112,14 +112,16 @@ TEST_CASE("Tensor 1D") {
     REQUIRE(t.size(0) == 5u);
     REQUIRE(t.numel() == 5u);
 
-    for (size_t i = 0; i < 5; i++) t[i] = (int)i * 3;
+    for (size_t i = 0; i < 5; i++)
+        t[i] = (int)i * 3;
     REQUIRE(t[4] == 12);
     REQUIRE(t({4}) == 12);
 }
 
 TEST_CASE("Tensor multi-dim indexing via operator()") {
     torch::Tensor<int> t{{3, 4}};
-    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+    for (size_t i = 0; i < t.numel(); i++)
+        t[i] = (int)i;
 
     // Row-major: (row, col) -> row*4 + col
     REQUIRE(t({0, 0}) == 0);
@@ -134,10 +136,10 @@ TEST_CASE("Tensor multi-dim indexing via operator()") {
 TEST_CASE("Tensor operator() bounds checking") {
     torch::Tensor<int> t{{2, 3}};
 
-    REQUIRE_THROWS_AS(t({2, 0}), std::out_of_range);  // row out of range
-    REQUIRE_THROWS_AS(t({0, 3}), std::out_of_range);  // col out of range
-    REQUIRE_THROWS_AS(t({0, 0, 0}), std::out_of_range);  // rank mismatch
-    REQUIRE_THROWS_AS(t({0}), std::out_of_range);  // rank mismatch (too few)
+    REQUIRE_THROWS_AS(t({2, 0}), std::out_of_range);    // row out of range
+    REQUIRE_THROWS_AS(t({0, 3}), std::out_of_range);    // col out of range
+    REQUIRE_THROWS_AS(t({0, 0, 0}), std::out_of_range); // rank mismatch
+    REQUIRE_THROWS_AS(t({0}), std::out_of_range); // rank mismatch (too few)
 }
 
 TEST_CASE("Tensor broadcast operations") {
@@ -145,8 +147,10 @@ TEST_CASE("Tensor broadcast operations") {
     torch::Tensor<float> b{{1, 3}};
 
     // a = [[1,2,3],[4,5,6]], b = [[1,2,3]]
-    for (size_t i = 0; i < a.numel(); i++) a[i] = (float)(i + 1);
-    for (size_t i = 0; i < b.numel(); i++) b[i] = (float)(i + 1);
+    for (size_t i = 0; i < a.numel(); i++)
+        a[i] = (float)(i + 1);
+    for (size_t i = 0; i < b.numel(); i++)
+        b[i] = (float)(i + 1);
 
     torch::Tensor<float> result = a + b;
 
@@ -174,7 +178,7 @@ TEST_CASE("Transpose swaps shape and strides") {
     torch::Tensor<int> t{{3, 4}};
     auto t_T = t.transpose(0, 1);
 
-    REQUIRE(t_T.shape()   == torch::shape_t{4, 3});
+    REQUIRE(t_T.shape() == torch::shape_t{4, 3});
     REQUIRE(t_T.strides() == torch::shape_t{1, 4});
 }
 
@@ -183,7 +187,7 @@ TEST_CASE("Transpose 3D swaps correct dims") {
     // original strides: {12, 4, 1}
     auto t_T = t.transpose(0, 2);
 
-    REQUIRE(t_T.shape()   == torch::shape_t{4, 3, 2});
+    REQUIRE(t_T.shape() == torch::shape_t{4, 3, 2});
     REQUIRE(t_T.strides() == torch::shape_t{1, 4, 12});
 }
 
@@ -197,7 +201,8 @@ TEST_CASE("Transpose makes tensor non-contiguous") {
 
 TEST_CASE("Transpose shares storage — write visible through both views") {
     torch::Tensor<int> t{{3, 4}};
-    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+    for (size_t i = 0; i < t.numel(); i++)
+        t[i] = (int)i;
 
     auto t_T = t.transpose(0, 1);
 
@@ -223,10 +228,11 @@ TEST_CASE("contiguous on already-contiguous tensor returns same-storage view") {
 
 TEST_CASE("contiguous on transposed tensor returns contiguous copy") {
     torch::Tensor<int> t{{3, 4}};
-    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+    for (size_t i = 0; i < t.numel(); i++)
+        t[i] = (int)i;
 
     auto t_T = t.transpose(0, 1);
-    auto c   = t_T.contiguous();
+    auto c = t_T.contiguous();
 
     REQUIRE(c.is_contiguous());
     REQUIRE(c.shape() == torch::shape_t{4, 3});
@@ -241,7 +247,8 @@ TEST_CASE("contiguous on transposed tensor returns contiguous copy") {
 
 TEST_CASE("Reshape preserves numel and values") {
     torch::Tensor<int> t{{2, 6}};
-    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+    for (size_t i = 0; i < t.numel(); i++)
+        t[i] = (int)i;
 
     torch::shape_t new_shape{3, 4};
     auto r = t.reshape(new_shape);
@@ -255,7 +262,8 @@ TEST_CASE("Reshape preserves numel and values") {
 
 TEST_CASE("Reshape to 1D") {
     torch::Tensor<int> t{{3, 4}};
-    for (size_t i = 0; i < t.numel(); i++) t[i] = (int)i;
+    for (size_t i = 0; i < t.numel(); i++)
+        t[i] = (int)i;
 
     torch::shape_t flat{12};
     auto r = t.reshape(flat);
@@ -267,6 +275,48 @@ TEST_CASE("Reshape to 1D") {
 
 TEST_CASE("Reshape incompatible numel throws") {
     torch::Tensor<int> t{{2, 6}};
-    torch::shape_t bad{3, 5};  // 15 != 12
+    torch::shape_t bad{3, 5}; // 15 != 12
     REQUIRE_THROWS(t.reshape(bad));
+}
+
+// ── fill_ ───────────────────────────────────────────────────────────────────
+
+TEST_CASE("fill_ sets all elements to value") {
+    torch::Tensor<int> t{{2, 3}};
+    t.fill_(42);
+
+    for (size_t i = 0; i < t.numel(); i++)
+        CHECK(t[i] == 42);
+}
+
+TEST_CASE("fill_ works on 1D tensor") {
+    torch::Tensor<float> t{{5}};
+    t.fill_(3.14f);
+
+    for (size_t i = 0; i < t.numel(); i++)
+        CHECK(t[i] == 3.14f);
+}
+
+TEST_CASE("fill_ works on transposed (non-contiguous) tensor") {
+    torch::Tensor<int> t{{3, 4}};
+    for (size_t i = 0; i < t.numel(); i++)
+        t[i] = (int)i;
+
+    auto t_T = t.transpose(0, 1); // shape {4,3}, non-contiguous
+    t_T.fill_(7);
+
+    // all elements of the transposed view should be 7
+    for (size_t i = 0; i < 4; i++)
+        for (size_t j = 0; j < 3; j++)
+            CHECK(t_T({i, j}) == 7);
+
+    // original tensor shares storage, so it should also be all 7s
+    for (size_t i = 0; i < t.numel(); i++)
+        CHECK(t[i] == 7);
+}
+
+TEST_CASE("fill_ returns reference to self") {
+    torch::Tensor<int> t{{2, 2}};
+    auto& ref = t.fill_(5);
+    REQUIRE(&ref == &t);
 }
