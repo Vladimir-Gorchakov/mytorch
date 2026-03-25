@@ -66,7 +66,7 @@ TensorIterator<T>::TensorIterator(const std::vector<const Tensor<T>*>& inputs,
         assert((!outputs.empty()));
         shape_ = outputs[0]->shape();
     } else {
-        shape_ = broadcast_shape(inputs);
+        shape_ = broadcast_shape(inputs, outputs[0]->shape());
     }
 
     for (auto& tensor : inputs) {
