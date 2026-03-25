@@ -172,6 +172,128 @@ TEST_CASE("TensorIterator incompatible shapes throw") {
     REQUIRE_THROWS(a + b);
 }
 
+// ── compound assignment operators ────────────────────────────────────────────
+
+TEST_CASE("operator+= tensor") {
+    torch::Tensor<int> a{{2, 3}};
+    torch::Tensor<int> b{{2, 3}};
+    for (size_t i = 0; i < a.numel(); i++) {
+        a[i] = (int)i + 1;
+        b[i] = (int)i * 2;
+    }
+
+    std::vector<int> expected(a.numel());
+    for (size_t i = 0; i < a.numel(); i++)
+        expected[i] = a[i] + b[i];
+
+    a += b;
+
+    for (size_t i = 0; i < a.numel(); i++)
+        CHECK(a[i] == expected[i]);
+}
+
+TEST_CASE("operator+= scalar") {
+    torch::Tensor<int> a{{2, 3}};
+    for (size_t i = 0; i < a.numel(); i++)
+        a[i] = (int)i;
+
+    a += 10;
+
+    for (size_t i = 0; i < a.numel(); i++)
+        CHECK(a[i] == (int)i + 10);
+}
+
+TEST_CASE("operator*= tensor") {
+    torch::Tensor<int> a{{2, 3}};
+    torch::Tensor<int> b{{2, 3}};
+    for (size_t i = 0; i < a.numel(); i++) {
+        a[i] = (int)i + 1;
+        b[i] = (int)i + 2;
+    }
+
+    std::vector<int> expected(a.numel());
+    for (size_t i = 0; i < a.numel(); i++)
+        expected[i] = a[i] * b[i];
+
+    a *= b;
+
+    for (size_t i = 0; i < a.numel(); i++)
+        CHECK(a[i] == expected[i]);
+}
+
+TEST_CASE("operator*= scalar") {
+    torch::Tensor<int> a{{2, 3}};
+    for (size_t i = 0; i < a.numel(); i++)
+        a[i] = (int)i + 1;
+
+    a *= 3;
+
+    for (size_t i = 0; i < a.numel(); i++)
+        CHECK(a[i] == ((int)i + 1) * 3);
+}
+
+TEST_CASE("operator/= tensor") {
+    torch::Tensor<int> a{{2, 3}};
+    torch::Tensor<int> b{{2, 3}};
+    for (size_t i = 0; i < a.numel(); i++) {
+        a[i] = ((int)i + 1) * 6;
+        b[i] = (int)i + 1;
+    }
+
+    std::vector<int> expected(a.numel());
+    for (size_t i = 0; i < a.numel(); i++)
+        expected[i] = a[i] / b[i];
+
+    a /= b;
+
+    for (size_t i = 0; i < a.numel(); i++)
+        CHECK(a[i] == expected[i]);
+}
+
+TEST_CASE("operator/= scalar") {
+    torch::Tensor<int> a{{2, 3}};
+    for (size_t i = 0; i < a.numel(); i++)
+        a[i] = ((int)i + 1) * 4;
+
+    a /= 2;
+
+    for (size_t i = 0; i < a.numel(); i++)
+        CHECK(a[i] == ((int)i + 1) * 2);
+}
+
+TEST_CASE("compound assignment returns reference to self") {
+    torch::Tensor<int> a{{2, 2}};
+    torch::Tensor<int> b{{2, 2}};
+    a.fill_(4);
+    b.fill_(2);
+
+    REQUIRE(&(a += b) == &a);
+    REQUIRE(&(a *= b) == &a);
+    REQUIRE(&(a /= b) == &a);
+    REQUIRE(&(a += 1) == &a);
+    REQUIRE(&(a *= 2) == &a);
+    REQUIRE(&(a /= 2) == &a);
+}
+
+TEST_CASE("operator+= with broadcasting") {
+    torch::Tensor<int> a{{2, 3}};
+    torch::Tensor<int> b{{1, 3}};
+    for (size_t i = 0; i < a.numel(); i++)
+        a[i] = (int)i + 1;
+    for (size_t i = 0; i < b.numel(); i++)
+        b[i] = (int)(i + 1) * 10;
+
+    // a = [[1,2,3],[4,5,6]], b = [[10,20,30]]
+    a += b;
+
+    CHECK(a({0, 0}) == 11);
+    CHECK(a({0, 1}) == 22);
+    CHECK(a({0, 2}) == 33);
+    CHECK(a({1, 0}) == 14);
+    CHECK(a({1, 1}) == 25);
+    CHECK(a({1, 2}) == 36);
+}
+
 // ── transpose ────────────────────────────────────────────────────────────────
 
 TEST_CASE("Transpose swaps shape and strides") {
@@ -319,4 +441,17 @@ TEST_CASE("fill_ returns reference to self") {
     torch::Tensor<int> t{{2, 2}};
     auto& ref = t.fill_(5);
     REQUIRE(&ref == &t);
+}
+
+// ── autodiff ────────────────────────────────────────────────────────────────
+
+TEST_CASE("autodiff single value test") {
+    torch::Tensor<float> a{{1}};
+    a.fill_(2.);
+
+    auto b = a * a;
+    auto c = b * b;
+    c.backward();
+
+    REQUIRE((*(a.grad_))[0] == 32.);
 }
