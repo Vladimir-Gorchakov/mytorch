@@ -44,7 +44,7 @@ class TensorIterator {
     size_t numel() const;
 
     static shape_t broadcast_shape(const std::vector<const Tensor<T>*>& inputs);
-    static shape_t broadcast_shape(const std::vector<const Tensor<T>*>& inputs, const shape_t& shape);
+    static shape_t broadcast_shape(const std::vector<const Tensor<T>*>& inputs, shape_t shape);
 
     shape_t compute_strides(shape_t strides, shape_t shape) const;
 
@@ -110,7 +110,7 @@ shape_t TensorIterator<T>::broadcast_shape(
 
 template <typename T>
 shape_t TensorIterator<T>::broadcast_shape(const std::vector<const Tensor<T>*>& inputs,
-                                           const shape_t& shape) {
+                                           shape_t shape) {
     for (size_t i = 1; i <= shape.size(); ++i) {
         for (auto tensor : inputs) {
             if (i > tensor->shape().size()) {
