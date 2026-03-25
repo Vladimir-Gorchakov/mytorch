@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "autodiff.hpp"
 #include "utils.hpp"
 
 namespace torch::iterator {
@@ -108,6 +109,15 @@ class Tensor {
 
     // _ - на конце обозначает inplace операцию
     Tensor<T>& fill_(const T& other);
+
+    std::shared_ptr<Tensor<T>> grad_;
+    std::shared_ptr<autodiff::BaseNode<T>> grad_fn_;
+    bool requires_grad_;
+
+    void backward() {
+        (*(grad_fn_->input_grad_)).fill_(1);
+        grad_fn_->backward();
+    }
 };
 
 template <typename T>
@@ -228,7 +238,10 @@ Tensor<T> Tensor<T>::reshape(const shape_t& shape) const {
 
 template <typename T>
 Tensor<T>& Tensor<T>::fill_(const T& other) {
-    iterator::TensorIteratorConfig<T>().add_output(*this).build().run(
+    iterator::TensorIteratorConfig<T>()
+    .add_output(*this)
+    .build()
+    .run(
         [other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
             ptrs_in; // чисто чтобы не ругался статический анализатор
             return (*ptrs_out[0]) = other;
@@ -279,14 +292,19 @@ template <typename T>
 Tensor<T> Tensor<T>::operator*(const Tensor<T>& other) const {
     Tensor<T> output{};
 
+    auto& left = *this;
+    auto& right = other;
+
     iterator::TensorIteratorConfig<T>()
-        .add_input(*this)
-        .add_input(other)
+        .add_input(left)
+        .add_input(right)
         .add_output(output)
         .build()
         .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
-            return (*ptrs_out[0]) = (*ptrs_in[1]) * (*ptrs_in[0]);
+            return (*ptrs_out[0]) = (*ptrs_in[0]) * (*ptrs_in[1]);
         });
+
+    grad_fn_ = std::make_shared<const autodiff::BaseNode<T>>(autodiff::MultNode<T>(left, right, output.shape()));
 
     return output;
 }
