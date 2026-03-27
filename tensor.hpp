@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "autodiff.hpp"
+#include "autograd.hpp"
 #include "utils.hpp"
 
 namespace torch::iterator {
@@ -53,18 +53,24 @@ class Tensor {
     size_t storage_offset_;
 
   public:
+    mutable std::shared_ptr<autograd::BaseNode<T>> grad_fn_;
+    mutable std::shared_ptr<Tensor<T>> grad_;
+    bool requires_grad_ = false;
+
+  public:
     Tensor()
         : storage_(nullptr),
           shape_({}),
           strides_({}),
           storage_offset_(0) {}
-    Tensor(const shape_t& shape);
+    Tensor(const shape_t& shape, bool requires_grad = false);
     Tensor(std::shared_ptr<Storage<T>> storage, const shape_t& shape,
-           shape_t strides, size_t storage_offset)
+           shape_t strides, size_t storage_offset, bool requires_grad = false)
         : storage_(storage),
           shape_(shape),
           strides_(strides),
-          storage_offset_(storage_offset){};
+          storage_offset_(storage_offset),
+          requires_grad_(requires_grad){};
 
     T& operator()(const shape_t& index);
     const T& operator()(const shape_t& index) const;
@@ -76,11 +82,20 @@ class Tensor {
         return storage_->data_[index + storage_offset_];
     }
 
-    Tensor<T> operator*(const Tensor<T>& other) const;
-    Tensor<T> operator*(const T& other) const;
+    Tensor<T>& operator+=(const Tensor<T>& other);
+    Tensor<T>& operator+=(const T& other);
 
     Tensor<T> operator+(const Tensor<T>& other) const;
     Tensor<T> operator+(const T& other) const;
+
+    Tensor<T>& operator*=(const Tensor<T>& other);
+    Tensor<T>& operator*=(const T& other);
+
+    Tensor<T> operator*(const Tensor<T>& other) const;
+    Tensor<T> operator*(const T& other) const;
+
+    Tensor<T>& operator/=(const Tensor<T>& other);
+    Tensor<T>& operator/=(const T& other);
 
     Tensor<T> operator/(const Tensor<T>& other) const;
     Tensor<T> operator/(const T& other) const;
@@ -110,18 +125,29 @@ class Tensor {
     // _ - на конце обозначает inplace операцию
     Tensor<T>& fill_(const T& other);
 
-    std::shared_ptr<Tensor<T>> grad_;
-    std::shared_ptr<autodiff::BaseNode<T>> grad_fn_;
-    bool requires_grad_;
+    bool requires_grad() const {
+        return (requires_grad_ || grad_fn_ != nullptr) &&
+               autograd::GradMode::is_enabled();
+    }
 
     void backward() {
-        (*(grad_fn_->input_grad_)).fill_(1);
-        grad_fn_->backward();
+        if (requires_grad() == true) {
+            autograd::NoGradGuard enable_guard{};
+
+            if (grad_fn_ == nullptr) {
+                throw std::runtime_error("Computational graph yet to be created");
+            }
+
+            (*(grad_fn_->input_grad_)).fill_(1);
+            grad_fn_->backward();
+        } else {
+            throw std::runtime_error("Tensor doesn't require grad and doesn't have grad_ and grad_fn_");
+        }
     }
 };
 
 template <typename T>
-Tensor<T>::Tensor(const shape_t& shape) : shape_(shape) {
+Tensor<T>::Tensor(const shape_t& shape, bool requires_grad) : shape_(shape), requires_grad_(requires_grad) {
     if (!shape_.empty()) {
         size_t total_len = 1;
         for (size_t dim : shape_) {
@@ -131,6 +157,11 @@ Tensor<T>::Tensor(const shape_t& shape) : shape_(shape) {
         storage_ = std::make_shared<Storage<T>>(total_len);
 
         strides_ = compute_strides(shape_);
+    }
+
+    if (requires_grad_) { // # Должен ли я обработать случай если shape_.empty()?
+        grad_ = std::make_shared<Tensor<T>>(shape_);
+        grad_->fill_(0);
     }
 
     storage_offset_ = 0;
@@ -243,7 +274,6 @@ Tensor<T>& Tensor<T>::fill_(const T& other) {
     .build()
     .run(
         [other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
-            ptrs_in; // чисто чтобы не ругался статический анализатор
             return (*ptrs_out[0]) = other;
         });
 
@@ -289,22 +319,46 @@ const T& Tensor<T>::operator()(const shape_t& index) const {
 }
 
 template <typename T>
+Tensor<T>& Tensor<T>::operator*=(const Tensor<T>& other) {
+    iterator::TensorIteratorConfig<T>()
+        .add_input(other)
+        .add_output(*this)
+        .build()
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) *= (*ptrs_in[0]);
+        });
+
+    return *this;
+}
+
+template <typename T>
+Tensor<T>& Tensor<T>::operator*=(const T& other) {
+    iterator::TensorIteratorConfig<T>()
+        .add_output(*this)
+        .build()
+        .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) *= other;
+        });
+
+    return *this;
+}
+
+template <typename T>
 Tensor<T> Tensor<T>::operator*(const Tensor<T>& other) const {
     Tensor<T> output{};
 
-    auto& left = *this;
-    auto& right = other;
-
     iterator::TensorIteratorConfig<T>()
-        .add_input(left)
-        .add_input(right)
+        .add_input(*this)
+        .add_input(other)
         .add_output(output)
         .build()
         .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
             return (*ptrs_out[0]) = (*ptrs_in[0]) * (*ptrs_in[1]);
         });
-
-    grad_fn_ = std::make_shared<const autodiff::BaseNode<T>>(autodiff::MultNode<T>(left, right, output.shape()));
+    
+    if (this->requires_grad() || other.requires_grad()){
+        output.grad_fn_ = std::make_shared<autograd::MultNode<T>>(*this, other, output.shape());
+    }
 
     return output;
 }
@@ -325,6 +379,31 @@ Tensor<T> Tensor<T>::operator*(const T& other) const {
 }
 
 template <typename T>
+Tensor<T>& Tensor<T>::operator+=(const Tensor<T>& other) {
+    iterator::TensorIteratorConfig<T>()
+        .add_input(other)
+        .add_output(*this)
+        .build()
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) += (*ptrs_in[0]);
+        });
+
+    return *this;
+}
+
+template <typename T>
+Tensor<T>& Tensor<T>::operator+=(const T& other) {
+    iterator::TensorIteratorConfig<T>()
+        .add_output(*this)
+        .build()
+        .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) += other;
+        });
+
+    return *this;
+}
+
+template <typename T>
 Tensor<T> Tensor<T>::operator+(const Tensor<T>& other) const {
     Tensor<T> output{};
 
@@ -334,7 +413,7 @@ Tensor<T> Tensor<T>::operator+(const Tensor<T>& other) const {
         .add_output(output)
         .build()
         .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
-            return (*ptrs_out[0]) = (*ptrs_in[1]) + (*ptrs_in[0]);
+            return (*ptrs_out[0]) = (*ptrs_in[0]) + (*ptrs_in[1]);
         });
 
     return output;
@@ -353,6 +432,31 @@ Tensor<T> Tensor<T>::operator+(const T& other) const {
         });
 
     return output;
+}
+
+template <typename T>
+Tensor<T>& Tensor<T>::operator/=(const Tensor<T>& other) {
+    iterator::TensorIteratorConfig<T>()
+        .add_input(other)
+        .add_output(*this)
+        .build()
+        .run([](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) /= (*ptrs_in[0]);
+        });
+
+    return *this;
+}
+
+template <typename T>
+Tensor<T>& Tensor<T>::operator/=(const T& other) {
+    iterator::TensorIteratorConfig<T>()
+        .add_output(*this)
+        .build()
+        .run([other](std::span<const T*> ptrs_in, std::span<T*> ptrs_out) {
+            return (*ptrs_out[0]) /= other;
+        });
+
+    return *this;
 }
 
 template <typename T>
